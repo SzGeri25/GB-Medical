@@ -445,16 +445,24 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `getAppointmentById` (IN `idIN` INT)
 END$$
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `getAvailableSlots` ()   BEGIN
-    -- Esetleges korábban létező ideiglenes tábla eldobása
     DROP TEMPORARY TABLE IF EXISTS TimeSlots;
     
-    -- Ideiglenes tábla létrehozása a schedule-okból generált slotokkal
     CREATE TEMPORARY TABLE TimeSlots AS
     SELECT 
-        s.doctor_id,
-        s.start_time + INTERVAL n.x * 30 MINUTE AS slot_start,
-        s.start_time + INTERVAL (n.x + 1) * 30 MINUTE AS slot_end
-    FROM schedules s
+        dwh.doctor_id,
+        TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.start_time) + INTERVAL (n.x * dwh.slot_duration) MINUTE AS slot_start,
+        TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.start_time) + INTERVAL ((n.x + 1) * dwh.slot_duration) MINUTE AS slot_end
+    FROM doctor_working_hours dwh
+    JOIN doctors d 
+      ON dwh.doctor_id = d.id AND d.is_deleted = 0
+    CROSS JOIN (
+        SELECT a.n + b.n * 10 AS day_offset
+        FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3
+              UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7
+              UNION ALL SELECT 8 UNION ALL SELECT 9) a
+        CROSS JOIN (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3) b
+        WHERE a.n + b.n * 10 <= 30
+    ) td
     JOIN (
         SELECT 0 AS x UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3
         UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7
@@ -462,11 +470,12 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `getAvailableSlots` ()   BEGIN
         UNION ALL SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15
         UNION ALL SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18 UNION ALL SELECT 19
         UNION ALL SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
-    ) AS n 
-      ON n.x * 30 < TIMESTAMPDIFF(MINUTE, s.start_time, s.end_time);
-    
-    -- Szabad slotok lekérdezése: összekapcsolva az orvosok és a szolgáltatások adataival,
-    -- és csak a jelenlegi idő utáni időpontok jelennek meg
+    ) n 
+      ON TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.start_time) + INTERVAL ((n.x + 1) * dwh.slot_duration) MINUTE 
+         <= TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.end_time)
+    WHERE dwh.is_active = 1
+      AND dwh.day_of_week = (WEEKDAY(CURDATE() + INTERVAL td.day_offset DAY) + 1);
+
     SELECT 
         ts.slot_start, 
         ts.slot_end, 
@@ -480,27 +489,39 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `getAvailableSlots` ()   BEGIN
       AND ts.slot_start < a.end_time
       AND ts.slot_end > a.start_time
       AND a.status <> 'cancelled'
+      AND a.is_deleted = 0
     LEFT JOIN doctors_x_services dxs
       ON ts.doctor_id = dxs.doctor_id
     LEFT JOIN services ser
-      ON dxs.service_id = ser.id
+      ON dxs.service_id = ser.id AND ser.is_deleted = 0
     LEFT JOIN doctors d
       ON ts.doctor_id = d.id
     WHERE a.id IS NULL
-      AND ts.slot_start > NOW()   -- Csak a jövőbeli időpontok jelennek meg
-    ORDER BY ts.slot_start;
+      AND ts.slot_start > NOW()
+    ORDER BY ts.slot_start, ts.doctor_id;
     
-    DROP TEMPORARY TABLE TimeSlots;
+    DROP TEMPORARY TABLE IF EXISTS TimeSlots;
 END$$
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `getAvailableSlotsByDoctor` (IN `doctorIdIN` INT)   BEGIN
-    -- Ideiglenes tábla létrehozása a doktor schedule-jából generált slotokkal
+    DROP TEMPORARY TABLE IF EXISTS TimeSlots;
+    
     CREATE TEMPORARY TABLE TimeSlots AS
     SELECT 
-        s.doctor_id,
-        s.start_time + INTERVAL n.x * 30 MINUTE AS slot_start,
-        s.start_time + INTERVAL (n.x + 1) * 30 MINUTE AS slot_end
-    FROM schedules s
+        dwh.doctor_id,
+        TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.start_time) + INTERVAL (n.x * dwh.slot_duration) MINUTE AS slot_start,
+        TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.start_time) + INTERVAL ((n.x + 1) * dwh.slot_duration) MINUTE AS slot_end
+    FROM doctor_working_hours dwh
+    JOIN doctors d 
+      ON dwh.doctor_id = d.id AND d.is_deleted = 0
+    CROSS JOIN (
+        SELECT a.n + b.n * 10 AS day_offset
+        FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3
+              UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7
+              UNION ALL SELECT 8 UNION ALL SELECT 9) a
+        CROSS JOIN (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3) b
+        WHERE a.n + b.n * 10 <= 30
+    ) td
     JOIN (
         SELECT 0 AS x UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3
         UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7
@@ -508,10 +529,13 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `getAvailableSlotsByDoctor` (IN `doc
         UNION ALL SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15
         UNION ALL SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18 UNION ALL SELECT 19
         UNION ALL SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
-    ) AS n ON n.x * 30 < TIMESTAMPDIFF(MINUTE, s.start_time, s.end_time)
-    WHERE s.doctor_id = doctorIdIN;
-    
-    -- Szabad slotok lekérdezése orvos névvel, service id-vel és a szolgáltatás nevével
+    ) n 
+      ON TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.start_time) + INTERVAL ((n.x + 1) * dwh.slot_duration) MINUTE 
+         <= TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.end_time)
+    WHERE dwh.is_active = 1
+      AND dwh.doctor_id = doctorIdIN
+      AND dwh.day_of_week = (WEEKDAY(CURDATE() + INTERVAL td.day_offset DAY) + 1);
+
     SELECT 
         ts.slot_start, 
         ts.slot_end, 
@@ -525,34 +549,41 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `getAvailableSlotsByDoctor` (IN `doc
       AND ts.slot_start < a.end_time
       AND ts.slot_end > a.start_time
       AND a.status <> 'cancelled'
+      AND a.is_deleted = 0
     LEFT JOIN doctors_x_services dxs
       ON ts.doctor_id = dxs.doctor_id
     LEFT JOIN services ser
-      ON dxs.service_id = ser.id
+      ON dxs.service_id = ser.id AND ser.is_deleted = 0
     LEFT JOIN doctors d
       ON ts.doctor_id = d.id
     WHERE a.id IS NULL
-    	AND ts.slot_start > NOW()   -- Csak a jövőbeli időpontok jelennek meg
+      AND ts.slot_start > NOW()
     ORDER BY ts.slot_start;
     
-    DROP TEMPORARY TABLE TimeSlots;
+    DROP TEMPORARY TABLE IF EXISTS TimeSlots;
 END$$
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `getAvailableSlotsByService` (IN `serviceIdIN` INT)   BEGIN
-    -- Orvosok kigyűjtése, akik a szolgáltatást nyújtják
-    CREATE TEMPORARY TABLE ServiceDoctors AS
-    SELECT dxs.doctor_id
-    FROM doctors_x_services dxs
-    WHERE dxs.service_id = serviceIdIN;
+    DROP TEMPORARY TABLE IF EXISTS TimeSlots;
     
-    -- TimeSlots generálása az összes, a kiválasztott orvosokhoz tartozó schedule alapján
     CREATE TEMPORARY TABLE TimeSlots AS
     SELECT 
-        s.doctor_id,
-        s.start_time + INTERVAL n.x * 30 MINUTE AS slot_start,
-        s.start_time + INTERVAL (n.x + 1) * 30 MINUTE AS slot_end
-    FROM schedules s
-    JOIN ServiceDoctors sd ON s.doctor_id = sd.doctor_id
+        dwh.doctor_id,
+        TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.start_time) + INTERVAL (n.x * dwh.slot_duration) MINUTE AS slot_start,
+        TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.start_time) + INTERVAL ((n.x + 1) * dwh.slot_duration) MINUTE AS slot_end
+    FROM doctor_working_hours dwh
+    JOIN doctors_x_services dxs_filter 
+      ON dwh.doctor_id = dxs_filter.doctor_id AND dxs_filter.service_id = serviceIdIN
+    JOIN doctors d 
+      ON dwh.doctor_id = d.id AND d.is_deleted = 0
+    CROSS JOIN (
+        SELECT a.n + b.n * 10 AS day_offset
+        FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3
+              UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7
+              UNION ALL SELECT 8 UNION ALL SELECT 9) a
+        CROSS JOIN (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3) b
+        WHERE a.n + b.n * 10 <= 30
+    ) td
     JOIN (
         SELECT 0 AS x UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3
         UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7
@@ -560,11 +591,12 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `getAvailableSlotsByService` (IN `se
         UNION ALL SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15
         UNION ALL SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18 UNION ALL SELECT 19
         UNION ALL SELECT 20 UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23
-    ) AS n 
-      ON n.x * 30 < TIMESTAMPDIFF(MINUTE, s.start_time, s.end_time)
-    ORDER BY slot_start;
-    
-    -- Szabad slotok lekérdezése: kizárjuk az ütköző (foglalttal lefoglalt) slotokat
+    ) n 
+      ON TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.start_time) + INTERVAL ((n.x + 1) * dwh.slot_duration) MINUTE 
+         <= TIMESTAMP(CURDATE() + INTERVAL td.day_offset DAY, dwh.end_time)
+    WHERE dwh.is_active = 1
+      AND dwh.day_of_week = (WEEKDAY(CURDATE() + INTERVAL td.day_offset DAY) + 1);
+
     SELECT 
         ts.slot_start, 
         ts.slot_end, 
@@ -578,18 +610,18 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `getAvailableSlotsByService` (IN `se
       AND ts.slot_start < a.end_time
       AND ts.slot_end > a.start_time
       AND a.status <> 'cancelled'
+      AND a.is_deleted = 0
     LEFT JOIN doctors d
       ON ts.doctor_id = d.id
     LEFT JOIN doctors_x_services dxs
       ON ts.doctor_id = dxs.doctor_id AND dxs.service_id = serviceIdIN
     LEFT JOIN services ser
-      ON dxs.service_id = ser.id
+      ON dxs.service_id = ser.id AND ser.is_deleted = 0
     WHERE a.id IS NULL
-    	AND ts.slot_start > NOW()   -- Csak a jövőbeli időpontok jelennek meg
+      AND ts.slot_start > NOW()
     ORDER BY ts.slot_start;
     
-    DROP TEMPORARY TABLE TimeSlots;
-    DROP TEMPORARY TABLE ServiceDoctors;
+    DROP TEMPORARY TABLE IF EXISTS TimeSlots;
 END$$
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `getBookedAppointments` ()   BEGIN
@@ -1532,6 +1564,42 @@ INSERT INTO `schedules` (`id`, `doctor_id`, `start_time`, `end_time`, `available
 -- --------------------------------------------------------
 
 --
+-- Tábla szerkezet: `doctor_working_hours`
+--
+CREATE TABLE `doctor_working_hours` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `doctor_id` int(11) NOT NULL,
+  `day_of_week` tinyint(1) NOT NULL COMMENT '1 = Hetfo, ..., 7 = Vasarnap',
+  `start_time` time NOT NULL,
+  `end_time` time NOT NULL,
+  `slot_duration` int(11) NOT NULL DEFAULT '30',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_dwh_doctor_day` (`doctor_id`,`day_of_week`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Alapértelmezett heti sablon betöltése az 1-15-ös azonosítójú orvosokhoz (Hétfő-Péntek: 08:00 - 16:00)
+INSERT INTO `doctor_working_hours` (`doctor_id`, `day_of_week`, `start_time`, `end_time`, `slot_duration`, `is_active`)
+SELECT 
+    d.id AS doctor_id,
+    w.day_num AS day_of_week,
+    '08:00:00' AS start_time,
+    '16:00:00' AS end_time,
+    30 AS slot_duration,
+    1 AS is_active
+FROM doctors d
+CROSS JOIN (
+    SELECT 1 AS day_num UNION ALL  -- Hétfő
+    SELECT 2 UNION ALL             -- Kedd
+    SELECT 3 UNION ALL             -- Szerda
+    SELECT 4 UNION ALL             -- Csütörtök
+    SELECT 5                       -- Péntek
+) w
+WHERE d.is_deleted = 0 AND d.id BETWEEN 1 AND 15;
+
+--
 -- Tábla szerkezet ehhez a táblához `services`
 --
 
@@ -1870,6 +1938,9 @@ ALTER TABLE `user_notifications`
   ADD CONSTRAINT `user_notifications_ibfk_1` FOREIGN KEY (`notification_id`) REFERENCES `notifications` (`id`),
   ADD CONSTRAINT `user_notifications_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `patients` (`id`);
 COMMIT;
+
+ALTER TABLE `doctor_working_hours`
+  ADD CONSTRAINT `fk_dwh_doctor` FOREIGN KEY (`doctor_id`) REFERENCES `doctors` (`id`) ON DELETE CASCADE;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
