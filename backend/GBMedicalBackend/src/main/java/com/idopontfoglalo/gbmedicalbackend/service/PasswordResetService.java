@@ -4,13 +4,13 @@ import com.idopontfoglalo.gbmedicalbackend.model.PasswordResetTokens;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.UUID;
-import jakarta.ejb.Stateless;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
+import javax.ejb.Stateless;
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
-import jakarta.persistence.Query;
+import javax.persistence.Query;
 
 @Stateless
 public class PasswordResetService {
