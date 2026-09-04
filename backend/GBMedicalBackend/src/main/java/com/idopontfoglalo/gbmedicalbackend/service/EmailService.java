@@ -72,7 +72,7 @@ public class EmailService {
                     throw new IllegalArgumentException("Nem támogatott email típus: " + emailType);
             }
 
-            message.setSubject(subject);
+            message.setSubject(subject, "UTF-8");
             message.setContent(content, "text/html;charset=utf-8");
 
             // Email küldése
