@@ -53,8 +53,7 @@ public class PasswordResetService {
     public void updatePatientPassword(String email, String newPassword) {
         String hashedPassword = hashPasswordSHA1(newPassword);
 
-        // JPA frissítő lekérdezés
-        Query query = em.createQuery("UPDATE Patients p SET p.password = :password WHERE p.email = :email");
+        Query query = em.createNativeQuery("UPDATE patients SET password = :password WHERE email = :email");
         query.setParameter("password", hashedPassword);
         query.setParameter("email", email);
 
@@ -93,16 +92,18 @@ public class PasswordResetService {
                     .setParameter("token", token)
                     .getSingleResult();
 
-            if (tokenEntity != null) {
-                // Token felhasználtnak jelölése
-                tokenEntity.setUsed(true);
-                em.merge(tokenEntity);
-                return true;
-            }
+            return tokenEntity != null;
         } catch (Exception e) {
             return false;
         }
-        return false;
+    }
+
+    public void markTokenAsUsed(String email, String token) {
+        Query query = em.createQuery(
+                "UPDATE PasswordResetTokens t SET t.used = true WHERE t.email = :email AND t.token = :token");
+        query.setParameter("email", email);
+        query.setParameter("token", token);
+        query.executeUpdate();
     }
 
 }

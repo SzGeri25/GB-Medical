@@ -45,7 +45,7 @@ public class PasswordResetController {
             PasswordResetTokens tokenEntity = passwordResetService.createPasswordResetToken(email);
 
             // Összeállítjuk a visszaállító linket
-            String resetLink = "http://localhost:4200/newPassword?token="
+            String resetLink = "http://localhost/newPassword?token="
                     + tokenEntity.getToken() + "&email=" + URLEncoder.encode(email, "UTF-8");
 
             // Email küldése a visszaállító linkkel
@@ -90,6 +90,7 @@ public class PasswordResetController {
 
             // Jelszó hash-elése és frissítése
             passwordResetService.updatePatientPassword(email, newPassword);
+            passwordResetService.markTokenAsUsed(email, token);
 
             return Response.ok(new JSONObject().put("message", "A jelszavad sikeresen frissült!").toString()).build();
         } catch (Exception ex) {
