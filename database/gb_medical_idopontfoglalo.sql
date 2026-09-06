@@ -286,7 +286,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `cancelAppointment` (IN `idIN` INT, 
         FROM appointments a
         JOIN doctors d ON a.doctor_id = d.id
         JOIN patients p ON a.patient_id = p.id
-        LEFT JOIN doctors_X_services ds ON d.id = ds.doctor_id
+        LEFT JOIN doctors_x_services ds ON d.id = ds.doctor_id
         LEFT JOIN services s ON ds.service_id = s.id
         WHERE a.id = idIN
         GROUP BY a.id;

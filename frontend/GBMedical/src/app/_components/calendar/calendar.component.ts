@@ -134,6 +134,7 @@ export class CalendarComponent implements OnInit {
   }
 
   async fetchBookedAppointments(): Promise<void> {
+    this.bookedEvents = [];
     try {
       const response = await fetch(this.bookedApiUrl);
       if (!response.ok) {
@@ -147,8 +148,8 @@ export class CalendarComponent implements OnInit {
         this.bookedEvents = responseData.appointments.map((appointment: any) => ({
           id: appointment.id,
           title: `${appointment.doctorName} - ${appointment.serviceName}`,
-          start: appointment.startTime,
-          end: appointment.endTime,
+          start: this.convertToLocalISOString(appointment.startTime),
+          end: this.convertToLocalISOString(appointment.endTime),
           backgroundColor: 'red',
           borderColor: 'red',
           extendedProps: {
@@ -167,6 +168,7 @@ export class CalendarComponent implements OnInit {
   }
 
   async loadAvailableAppointments(): Promise<void> {
+    this.availableEvents = [];
     try {
       let response: any;
 
@@ -224,6 +226,13 @@ export class CalendarComponent implements OnInit {
    * Átalakítja a bejövő időpontot úgy, hogy a helyi időt tükrözze.
    */
   convertToLocalISOString(dateInput: string | Date): string {
+    if (typeof dateInput === 'string') {
+      const wallClockMatch = dateInput.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
+      if (wallClockMatch) {
+        return `${wallClockMatch[1]} ${wallClockMatch[2]}`;
+      }
+    }
+
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
 
     if (isNaN(date.getTime())) {
@@ -231,9 +240,9 @@ export class CalendarComponent implements OnInit {
       return "";
     }
 
-    const tzoffset = date.getTimezoneOffset() * 60000;
-    const localDate = new Date(date.getTime() - tzoffset);
-    return localDate.toISOString().slice(0, 19).replace('T', ' ');
+    const pad = (value: number): string => value.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+      + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   }
 
   handleEventClick(info: any): void {
@@ -276,7 +285,7 @@ export class CalendarComponent implements OnInit {
     }
 
     const isOwner = patientId === info.event.extendedProps?.patientId;
-    const isBooked = info.event.backgroundColor === 'blue';
+    const isBooked = info.event.extendedProps?.status === 'booked';
 
     if (isBooked) {
       const currentUrl = new URL(window.location.href);
@@ -303,36 +312,12 @@ export class CalendarComponent implements OnInit {
       width: '400px'
     });
 
-    dialogRef.afterClosed().subscribe((result: { bookAppointment: boolean, cancelAppointment: boolean }) => {
-      if (result?.bookAppointment) {
-        const appointment = {
-          doctorId: doctorId,
-          patientId: patientId,
-          startTime: startTime,
-          endTime: endTime,
-        };
-
-        this.appointmentService.addAppointmentWithNotification(appointment).subscribe({
-          next: response => {
-            console.log('Foglalás sikeres:', response);
-            Swal.fire({
-              title: 'Sikeres foglalás!',
-              text: 'Az időpontot sikeresen lefoglaltad.',
-              icon: 'success',
-              timer: 3000
-            });
-            this.fetchBookedAppointments().then(() => this.updateCalendarEvents());
-          },
-          error: error => {
-            console.error('Foglalás hiba:', error);
-            Swal.fire({
-              title: 'Hiba!',
-              text: 'Nem sikerült a foglalás. Próbáld újra később!',
-              icon: 'error',
-              timer: 3000
-            });
-          }
-        });
+    dialogRef.afterClosed().subscribe((result: { refresh?: boolean } | undefined) => {
+      if (result?.refresh) {
+        Promise.all([
+          this.fetchBookedAppointments(),
+          this.loadAvailableAppointments()
+        ]).then(() => this.updateCalendarEvents());
       }
     });
   }

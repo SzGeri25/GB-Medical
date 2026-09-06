@@ -1,7 +1,7 @@
 <div class="modal-container">
     <div class="modal-header">
         <h2>{{ data.title }}</h2>
-        <button class="close-button" (click)="onClose()">
+        <button class="close-button" (click)="onClose()" [disabled]="isProcessing" aria-label="Bezárás">
             <mat-icon>close</mat-icon>
         </button>
     </div>
@@ -10,13 +10,16 @@
         <p><strong>Befejezés:</strong> {{ data.end }}</p>
         <p><strong>Státusz:</strong> {{ data.status === 'booked' ? 'Foglalt' : 'Szabad' }}</p>
         <button *ngIf="data.status !== 'booked'" mat-button color="primary" (click)="onBookingClick()"
-            class="bookingButton">
-            Időpontfoglalás
+            class="bookingButton" [disabled]="isProcessing">
+            <span *ngIf="isProcessing" class="loading-spinner" aria-hidden="true"></span>
+            {{ isProcessing ? 'Foglalás folyamatban...' : 'Időpontfoglalás' }}
         </button>
 
         <!-- Lemondás gomb csak akkor jelenik meg, ha a jelenlegi felhasználóé az időpont -->
-        <button *ngIf="data.allowCancellation" mat-button color="warn" (click)="onCancelClick()" class="cancelButton">
-            Lemondás
+        <button *ngIf="data.allowCancellation" mat-button color="warn" (click)="onCancelClick()" class="cancelButton"
+            [disabled]="isProcessing">
+            <span *ngIf="isProcessing" class="loading-spinner" aria-hidden="true"></span>
+            {{ isProcessing ? 'Lemondás folyamatban...' : 'Lemondás' }}
         </button>
 
     </div>

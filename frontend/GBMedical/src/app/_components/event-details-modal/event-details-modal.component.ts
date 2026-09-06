@@ -27,6 +27,7 @@ export interface EventDetailsData {
 })
 export class EventDetailsModalComponent {
   currentUserId: number | null = null; // Jelenlegi felhasználó ID-ja
+  isProcessing = false;
 
   constructor(
     public dialogRef: MatDialogRef<EventDetailsModalComponent>,
@@ -38,11 +39,18 @@ export class EventDetailsModalComponent {
   }
 
   onClose(): void {
+    if (this.isProcessing) {
+      return;
+    }
     this.dialogRef.close();
   }
 
   // Az időpontfoglalás gomb kattintásának kezelése
   onBookingClick(): void {
+    if (this.isProcessing) {
+      return;
+    }
+    this.isProcessing = true;
     console.log('Időpontfoglalás indítása...');
 
     // Az időpontfoglaláshoz szükséges adatok
@@ -64,9 +72,10 @@ export class EventDetailsModalComponent {
           icon: 'success',
           timer: 3000
         });
-        this.dialogRef.close(); // Modal bezárása sikeres foglalás után
+        this.dialogRef.close({ refresh: true });
       },
       error: error => {
+        this.isProcessing = false;
         console.error('Foglalás hiba:', error);
         Swal.fire({
           title: 'Hiba!',
@@ -79,6 +88,9 @@ export class EventDetailsModalComponent {
   }
 
   onCancelClick(): void {
+    if (this.isProcessing) {
+      return;
+    }
     if (this.data.patientId !== this.currentUserId) {
       return;
     }
@@ -89,6 +101,7 @@ export class EventDetailsModalComponent {
       return;
     }
 
+    this.isProcessing = true;
     // Hívjuk a cancelAppointment metódust appointmentId és patientId-val
     this.appointmentService.cancelAppointment(this.data.appointmentId, this.data.patientId).subscribe({
       next: response => {
@@ -98,9 +111,10 @@ export class EventDetailsModalComponent {
           icon: 'success',
           timer: 3000
         });
-        this.dialogRef.close();
+        this.dialogRef.close({ refresh: true });
       },
       error: error => {
+        this.isProcessing = false;
         Swal.fire({
           title: 'Hiba!',
           text: 'Nem sikerült a lemondás. Próbáld újra később!',

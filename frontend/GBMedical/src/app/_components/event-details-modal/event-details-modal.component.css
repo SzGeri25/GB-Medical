@@ -56,6 +56,11 @@
     transform: rotate(90deg);
 }
 
+.close-button:disabled {
+    cursor: wait;
+    opacity: 0.5;
+}
+
 .modal-content {
     margin-top: 16px;
     font-size: 1rem;
@@ -119,4 +124,28 @@
 
 .cancelButton:active {
     box-shadow: none;
+}
+
+.bookingButton:disabled,
+.cancelButton:disabled {
+    cursor: wait;
+    opacity: 0.8;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    vertical-align: -3px;
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }

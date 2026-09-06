@@ -346,11 +346,11 @@ public class Appointments implements Serializable {
     public String getPatientFullName(int patientId) {
         EntityManager em = emf.createEntityManager();
         try {
-            Patients patient = em.find(Patients.class, patientId);
-            if (patient != null) {
-                return patient.getFirstName() + " " + patient.getLastName();
-            }
-            return "";
+            Object[] patient = (Object[]) em.createNativeQuery(
+                    "SELECT first_name, last_name FROM patients WHERE id = ?1")
+                    .setParameter(1, patientId)
+                    .getSingleResult();
+            return patient[0] + " " + patient[1];
         } finally {
             em.close();
         }
@@ -360,11 +360,10 @@ public class Appointments implements Serializable {
     public String getPatientEmail(int patientId) {
         EntityManager em = emf.createEntityManager();
         try {
-            Patients patient = em.find(Patients.class, patientId);
-            if (patient != null) {
-                return patient.getEmail();  // Győződj meg róla, hogy a Patients entitásban létezik egy getEmail() metódus!
-            }
-            return "";
+            return (String) em.createNativeQuery(
+                    "SELECT email FROM patients WHERE id = ?1")
+                    .setParameter(1, patientId)
+                    .getSingleResult();
         } finally {
             em.close();
         }
@@ -374,11 +373,10 @@ public class Appointments implements Serializable {
     public String getDoctorName(int doctorId) {
         EntityManager em = emf.createEntityManager();
         try {
-            Doctors doctor = em.find(Doctors.class, doctorId);
-            if (doctor != null) {
-                return doctor.getName();
-            }
-            return "";
+            return (String) em.createNativeQuery(
+                    "SELECT name FROM doctors WHERE id = ?1")
+                    .setParameter(1, doctorId)
+                    .getSingleResult();
         } finally {
             em.close();
         }
@@ -388,12 +386,12 @@ public class Appointments implements Serializable {
     public String getServiceName(int doctorId) {
         EntityManager em = emf.createEntityManager();
         try {
-            Doctors doctor = em.find(Doctors.class, doctorId);
-            if (doctor != null) {
-                // Tegyük fel, hogy az orvos entitásban van egy serviceName mező
-                return doctor.getServiceName();
-            }
-            return "";
+            return (String) em.createNativeQuery(
+                    "SELECT s.name FROM doctors_x_services ds "
+                    + "JOIN services s ON s.id = ds.service_id "
+                    + "WHERE ds.doctor_id = ?1 LIMIT 1")
+                    .setParameter(1, doctorId)
+                    .getSingleResult();
         } finally {
             em.close();
         }

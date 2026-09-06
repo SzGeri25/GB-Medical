@@ -36,23 +36,26 @@ public class AppointmentService {
                 statusCode = 500;
             } else {
 
-                // Sikeres foglalás esetén lekérjük a szükséges adatokat
-                String patientName = layer.getPatientFullName(patientId);
-                String patientEmail = layer.getPatientEmail(patientId); // Itt kapjuk meg a páciens email címét
-                String doctorName = layer.getDoctorName(doctorId);
-                String serviceType = layer.getServiceName(doctorId);
+                // Az adatbázis-művelet már sikeres; az értesítő e-mail hibája ezt ne írja felül.
+                try {
+                    String patientName = layer.getPatientFullName(patientId);
+                    String patientEmail = layer.getPatientEmail(patientId);
+                    String doctorName = layer.getDoctorName(doctorId);
+                    String serviceType = layer.getServiceName(doctorId);
 
-                // Email HTML tartalom összeállítása
-                String emailContent = "<p>Kedves " + patientName + ",</p>"
-                        + "<p>Az időpontfoglalás sikeresen rögzítésre került. A foglalás részletei:</p>"
-                        + "<p>"
-                        + "Időtartam: " + startTime + " - " + endTime + "<br>"
-                        + "Szolgáltatás: " + serviceType + "<br>"
-                        + "Orvos: " + doctorName
-                        + "</p>";
+                    String emailContent = "<p>Kedves " + patientName + ",</p>"
+                            + "<p>Az időpontfoglalás sikeresen rögzítésre került. A foglalás részletei:</p>"
+                            + "<p>"
+                            + "Időtartam: " + startTime + " - " + endTime + "<br>"
+                            + "Szolgáltatás: " + serviceType + "<br>"
+                            + "Orvos: " + doctorName
+                            + "</p>";
 
-                // Email elküldése a meglévő EmailService segítségével
-                EmailService.sendEmail(patientEmail, EmailService.EmailType.APPOINTMENT_CONFIRMATION, emailContent);
+                    EmailService.sendEmail(patientEmail, EmailService.EmailType.APPOINTMENT_CONFIRMATION, emailContent);
+                } catch (Exception notificationException) {
+                    System.err.println("A foglalás sikerült, de az értesítő e-mail küldése nem sikerült: "
+                            + notificationException.getMessage());
+                }
 
                 JSONObject result = new JSONObject();
                 result.put("message", "Appointment successfully created with notification");
@@ -85,7 +88,7 @@ public class AppointmentService {
                 JSONArray appointmentsArray = new JSONArray();
 
                 // ISO 8601 formátum: például "2025-01-22T10:00:00+01:00"
-                SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX");
+                SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
 
                 for (Appointments appointment : bookedAppointments) {
                     JSONObject appointmentObject = new JSONObject();
@@ -206,26 +209,29 @@ public class AppointmentService {
                 throw new Exception(modelResult.getString("error"));
             }
 
-            // Email küldése
-            JSONObject details = modelResult.getJSONObject("appointmentDetails");
-            String emailContent = "<h3>Időpont lemondva</h3>"
-                    + "<p>Kedves " + details.getString("patientName") + ",</p>"
-                    + "<p>Az alábbi időpontodat lemondtuk:</p>"
-                    + "<ul>"
-                    + "<li><strong>Orvos:</strong> " + details.getString("doctorName") + "</li>"
-                    + "<li><strong>Szolgáltatások:</strong> " + details.getString("services") + "</li>"
-                    + "<li><strong>Időpont:</strong> " + details.getString("startTime") + " - " + details.getString("endTime") + "</li>"
-                    + "</ul>";
-
-            boolean emailSent = EmailService.sendEmail(
-                    details.getString("patientEmail"),
-                    EmailService.EmailType.APPOINTMENT_CANCELLATION,
-                    emailContent
-            );
-
-            // Válasz összeállítása
             toReturn.put("result", modelResult);
-            toReturn.put("emailSent", emailSent);
+            try {
+                JSONObject details = modelResult.getJSONObject("appointmentDetails");
+                String emailContent = "<h3>Időpont lemondva</h3>"
+                        + "<p>Kedves " + details.getString("patientName") + ",</p>"
+                        + "<p>Az alábbi időpontodat lemondtuk:</p>"
+                        + "<ul>"
+                        + "<li><strong>Orvos:</strong> " + details.getString("doctorName") + "</li>"
+                        + "<li><strong>Szolgáltatások:</strong> " + details.getString("services") + "</li>"
+                        + "<li><strong>Időpont:</strong> " + details.getString("startTime") + " - " + details.getString("endTime") + "</li>"
+                        + "</ul>";
+
+                boolean emailSent = EmailService.sendEmail(
+                        details.getString("patientEmail"),
+                        EmailService.EmailType.APPOINTMENT_CANCELLATION,
+                        emailContent
+                );
+                toReturn.put("emailSent", emailSent);
+            } catch (Exception notificationException) {
+                System.err.println("A lemondás sikerült, de az értesítő e-mail küldése nem sikerült: "
+                        + notificationException.getMessage());
+                toReturn.put("emailSent", false);
+            }
 
         } catch (Exception e) {
             responseStatus = "error";
